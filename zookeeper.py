@@ -155,7 +155,7 @@ class Zookeeper:
         zk_fs = re.sub("[A-Za-z.]", "", zk_fs)
         if int(zk_fs) > int(cur_seq):
             logging.info('zk_seq > cur_seq, wait...')
-            return None
+            return "", "", ""
         zk_seq = int(zk_seq) + 1
         if zk_seq > self.MAX_MERGE_FILE_SEQUENCE:
             zk_seq = 0

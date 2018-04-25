@@ -77,8 +77,8 @@ while 1:
     sys_sequence = merge_date + str(sequence)
     logging.info('get system sequence:%s' % sys_sequence)
     file_date, prov, zk_seq = zoo.zk_get_merge_fn(sys_sequence, zk_filenamepool)
-    logging.info("get zookeeper file date:%s, prov:%s, sequence:%s " % (file_date, prov, zk_seq))
-    if not zk_seq:
+    # logging.info("get zookeeper file date:%s, prov:%s, sequence:%s " % (file_date, prov, zk_seq))
+    if zk_seq == "":
         # zk_seq > cur_seq，未到合并时间点
         time.sleep(20)
         continue
@@ -87,4 +87,4 @@ while 1:
         my_flow.get_file(match_expr + prov)
         my_flow.work(file_date, prov, zk_seq, filename_part)
         logging.info("work end")
-        # time.sleep(1)
+        time.sleep(1)
