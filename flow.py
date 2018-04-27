@@ -24,7 +24,7 @@ from redo import Redo
 
 class Flow:
     def __init__(self, process_id, line_limit, input_path, output_path,
-                 redo_path, batch_size, bak_path, filename_header):
+                 redo_path, batch_size, bak_path, filename_header, zoo, redo_node):
         self.process_id = process_id
         self.fieldlen = ""
         self.line_limit = int(line_limit)
@@ -36,6 +36,8 @@ class Flow:
         self.filename_header = filename_header
         self.input_temp = self.input_path + "/" + self.process_id
         self.output_temp = self.output_path + "/" + self.process_id
+        self.zoo = zoo
+        self.redo_node = redo_node
 
     def work(self, file_date, prov, seq, filename_part):
         HEAD = self.filename_header
@@ -44,6 +46,11 @@ class Flow:
         SPLIT = "."
         SEQ = seq
         new_filename = ""
+        redo_info = []
+        filename_pool = ",".join([file_date, prov, seq])
+        redo_info.append("filenamepool:" + filename_pool)
+        redo_info.append("begin")
+        self.zoo.set_node_value(self.redo_node, ";".join(redo_info).encode("utf-8"))
         filename_part_list = filename_part.split(",")
         for part in filename_part_list:
             if part.startswith("$"):
@@ -58,16 +65,16 @@ class Flow:
             os.makedirs(self.output_temp)
         new_file = open(self.output_temp + "/" + new_filename, "a")
         arrive_time = ""
-        rf = ("%s/merge.%s.redo" % (self.redo_path, self.process_id))
-        redo_file = open(rf, 'a')
-        redo_file.writelines(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
-        redo_file.close()
-        # 实例化类
-        redo = Redo()
-        redo_content_dic = {"todo_list": file_list, "action_step": "BEGIN"}
-        redo.write_redo(rf, redo_content_dic)
-        redo.write_redo(rf, {'zk_seq': seq})
-        redo.write_redo(rf, {'file_list': new_filename})
+        # rf = ("%s/merge.%s.redo" % (self.redo_path, self.process_id))
+        # redo_file = open(rf, 'a')
+        # redo_file.writelines(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
+        # redo_file.close()
+        # # 实例化类
+        # redo = Redo()
+        # redo_content_dic = {"todo_list": file_list, "action_step": "BEGIN"}
+        # redo.write_redo(rf, redo_content_dic)
+        # redo.write_redo(rf, {'zk_seq': seq})
+        # redo.write_redo(rf, {'file_list': new_filename})
         line_num = 0
         file_num = 0
         end_file_list = copy.deepcopy(file_list)
@@ -118,11 +125,15 @@ class Flow:
             logging.info("finish file:%s" % file)
 
         new_file.close()
-        redo_content_done = {"action_step": "END"}
-        redo.write_redo(rf, redo_content_done)
-        redo_file.close()
+        redo_info.append("filenamepool:" + filename_pool)
+        redo_info.append("end")
+        self.zoo.set_node_value(self.redo_node, ";".join(redo_info).encode("utf-8"))
+        # redo_content_done = {"action_step": "END"}
+        # redo.write_redo(rf, redo_content_done)
+        # redo_file.close()
         self.move_file(end_file_list, new_filename)
-        redo.delete_redo(rf)
+        self.zoo.delete_node(self.redo_node)
+        # redo.delete_redo(rf)
 
     def move_file(self, sourcefile_list, outputfile):
 

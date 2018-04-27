@@ -53,9 +53,6 @@ class Zookeeper:
         for c in childs:
             if re.findall(p1, c):
                 node_list.append(c)
-
-        # len += 1
-        node_list = sorted(node_list)
         node_list = sorted(node_list)
         if len(node_list) <= 0:
             print("no process id in zookeeper process path")
@@ -74,9 +71,9 @@ class Zookeeper:
                     continue
                 lock_node = "%s/%s" % (node_name, 'lock')
                 self.zk.create(lock_node, ephemeral=True)
-                process_id = ''.join(node.split('_')[1:])
-                logging.info('get process_id :%s from zookeeper ' % process_id)
-                return process_id
+                # process_id = ''.join(node.split('_')[1:])
+                logging.info('get process_id :%s from zookeeper ' % node)
+                return node
             get_times += 1
             print("no free process id in zookeeper")
             if get_times >= 3:
@@ -92,6 +89,9 @@ class Zookeeper:
         """
         self.zk.create(lock, ephemeral=True)
 
+    def check_exists(self, node_path):
+        return self.zk.exists(node_path)
+
     def get_config(self, config_path, config_node):
         """
         generate config files based on node's information
@@ -102,6 +102,31 @@ class Zookeeper:
         data, stat = self.zk.get(config_node)
         with open(config_path + "config.ini", 'w') as f:
             f.writelines(data.decode())
+
+    def get_node_value(self, zk_node):
+        data, stat = self.zk.get(zk_node)
+        return data, stat
+
+    def set_node_value(self, zk_node, data):
+        return self.zk.set(zk_node, value=data)
+
+    def delete_node(self, zk_node):
+        self.zk.delete(zk_node)
+
+    def create_node(self, node, flag=False):
+        """
+        lock the free node
+        :param node:
+        :param flag:
+        :return:
+        """
+        try:
+            self.zk.create(node, ephemeral=flag)
+        except Exception as e:
+            logging.info("create zookeeper node:%s failed, err:%s" % (node, e))
+            print(node, e)
+            return False
+        return True
 
     def cp(self, src, dest):
         """
@@ -130,9 +155,6 @@ class Zookeeper:
         self.zk.create(dest)
         self.zk.set(dest, value=data)
 
-    def zk_rename(self):
-        pass
-
     def zk_get_merge_fn(self, cur_seq, filename_pool):
         """
         get zookeeper seq
@@ -147,26 +169,24 @@ class Zookeeper:
         if not child:
             logging.error('the zookeeper filename_pool is empty')
             sys.exit()
-        child.sort()
         zk_fn_seq = child[0]
-        file_date,zk_seq, prov = zk_fn_seq.split('.')
-
+        file_date, zk_seq = zk_fn_seq.split('.')
         zk_fs = ("%s%s" % (file_date, zk_seq))
         zk_fs = re.sub("[A-Za-z.]", "", zk_fs)
         if int(zk_fs) > int(cur_seq):
             logging.info('zk_seq > cur_seq, wait...')
-            return "", "", ""
+            return None
         zk_seq = int(zk_seq) + 1
         if zk_seq > self.MAX_MERGE_FILE_SEQUENCE:
             zk_seq = 0
             file_date = datetime.datetime.strptime(file_date, '%Y%m%d')
-            next_seq = file_date + datetime.timedelta(days=1)
-            file_date = ('%s%02d%02d' % (next_seq.year, next_seq.month, next_seq.day))
+            next = file_date + datetime.timedelta(days=1)
+            file_date = ('%s%02d%02d' % (next.year, next.month, next.day))
 
         zk_seq = "%03d" % zk_seq
-        next_child = '%s.%s.%s' % (file_date, zk_seq, prov)
+        next_child = '%s.%s' % (file_date, zk_seq)
         self.zk.delete("%s/%s" % (filename_pool, zk_fn_seq))
         self.zk.create("%s/%s" % (filename_pool, next_child))
 
-        return file_date, prov, zk_seq
+        return next_child
 

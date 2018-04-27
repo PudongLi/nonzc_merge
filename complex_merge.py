@@ -9,8 +9,8 @@ import re
 from config import Config
 from lib.nframe import PublicLib
 from zookeeper import Zookeeper
-from check_redo import CheckRedo
 from flow import Flow
+from zk_redo import ZkRedo
 
 pl = PublicLib()
 config_file = ''
@@ -48,8 +48,10 @@ zk_host_list = cfg["zookeeper"]["zklist"]
 
 # 创建zookeeper实例
 zoo = Zookeeper(zk_host_list, MAX_MERGE_FILE_SEQUENCE)
-process_id = zoo.get_node(process_path)
+work_node = zoo.get_node(process_path)
+process_id = ''.join(work_node.split('_')[1:])
 pl.set_log(log_path, process_id)
+# ------------------------------------
 line_limit = cfg["common"]["line_limit"]
 input_path = cfg["common"]["inputdir"]
 output_path = cfg["common"]["destdir"]
@@ -57,18 +59,31 @@ redo_path = cfg["common"]["redopath"]
 batch_size = cfg["common"]["batchsize"]
 bak_path = cfg["common"]["bakpath"]
 filename_part = cfg["rule"]["filenamepart"]
+# ------------------------------------
+redo_node = process_path + "/" + work_node + "/" + "redo"
+redo_node_flag = zoo.check_exists(redo_node)
+my_flow = Flow(process_id, line_limit, input_path, output_path, redo_path, batch_size, bak_path, filename_header,
+               zoo, redo_node)
+recover = 0
 
-my_flow = Flow(process_id, line_limit, input_path, output_path, redo_path, batch_size, bak_path, filename_header)
-redo_file = redo_path + "/" + "merge." + process_id + ".redo"
-check_redo = CheckRedo(redo_file, process_id, config.output_dirs)
-recover, zk_seq, filename = check_redo.do_task()
-if recover == 1:
-    logging.info('redo:recover=1,Revert...')
-    filename = filename.strip(os.linesep)
-    file_date, prov, zk_seq = filename.split(".")
-    file_date = re.sub("[A-Za-z.]", "", file_date)
-    my_flow.work(file_date, prov, zk_seq, filename_part)
+if redo_node_flag is not None:
+    redo_info, stat = zoo.get_node_value(redo_node)
+    if redo_info is not None:
+        bak_path = cfg["common"]["bakpath"]
+        input_dir = cfg["common"]["inputdir"]
+        output_dirs = config.output_dirs
+        zk_redo = ZkRedo(redo_info, process_id, input_dir, output_dirs, bak_path)
+        recover, filename_pool_str = zk_redo.do_task()
+        file_date, prov, zk_seq = filename_pool_str.split(",")
+        my_flow.work(file_date, prov, zk_seq, filename_part)
+# ------------------------------------
+
+# redo_file = redo_path + "/" + "merge." + process_id + ".redo"
+# check_redo = CheckRedo(redo_file, process_id, config.output_dirs)
+# recover, zk_seq, filename = check_redo.do_task()
+
 while 1:
+    redo_info = []
     current_time = datetime.datetime.now().strftime('%Y%m%d-%H-%M-%S')
     merge_date, hh, mi, ss = current_time.split('-')
     # 获取当前系统序号
@@ -77,12 +92,15 @@ while 1:
     sys_sequence = merge_date + str(sequence)
     logging.info('get system sequence:%s' % sys_sequence)
     file_date, prov, zk_seq = zoo.zk_get_merge_fn(sys_sequence, zk_filenamepool)
-    # logging.info("get zookeeper file date:%s, prov:%s, sequence:%s " % (file_date, prov, zk_seq))
     if zk_seq == "":
         # zk_seq > cur_seq，未到合并时间点
         time.sleep(20)
         continue
     else:
+        filename_pool = ",".join([file_date, prov, zk_seq])
+        redo_info.append("filenamepool:" + filename_pool)
+        zoo.create_node(redo_node)
+        zoo.set_node_value(redo_node, ";".join(redo_info).encode("utf-8"))
         logging.info("match expr:%s" % (match_expr + prov))
         my_flow.get_file(match_expr + prov)
         my_flow.work(file_date, prov, zk_seq, filename_part)
