@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import re
 import logging
 import datetime
@@ -10,7 +9,7 @@ from kazoo.client import KazooClient
 class Zookeeper:
 
     def __init__(self, hosts, max_merge_seq):
-        logging.info('create a zookeeper object')
+        print('create a zookeeper object')
         self.zk = ""
         self.IsConn = False
         self.Hosts = hosts
@@ -24,25 +23,24 @@ class Zookeeper:
         connect to zookeeper
         :return:zookeeper object
         """
-        logging.info('try connect to zookeeper')
+        print('try connect to zookeeper')
         self.zk = KazooClient(self.Hosts)
         try:
             self.zk.start()
         except Exception as e:
-            print("connect time out")
+            print("connect zookeeper failed, err:%s" % e)
             sys.exit()
         self.IsConn = True
+        print('connect zookeeper success')
         return self.zk
 
     def get_node(self, node_path):
         """
-        get free node
+        获取空闲的process_id
         :return: process_id
         """
         self.connect()
-        logging.info('connect zookeeper success')
         self.process_path = node_path
-
         node_list = []
         if not (self.zk.exists(node_path)):
             logging.error('zookeeper process node path: %s not exist' % node_path)
@@ -72,14 +70,13 @@ class Zookeeper:
                 lock_node = "%s/%s" % (node_name, 'lock')
                 self.zk.create(lock_node, ephemeral=True)
                 # process_id = ''.join(node.split('_')[1:])
-                logging.info('get process_id :%s from zookeeper ' % node)
+                print('get process_id :%s from zookeeper ' % node)
                 return node
             get_times += 1
             print("no free process id in zookeeper")
             if get_times >= 3:
                 print("get process id faild three times, please check zookeeper process id, exit")
                 sys.exit()
-            time.sleep(5)
 
     def lock(self, lock):
         """
@@ -104,18 +101,35 @@ class Zookeeper:
             f.writelines(data.decode())
 
     def get_node_value(self, zk_node):
+        """
+        获取zookeeper的节点信息
+        :param zk_node:
+        :return: data:node的value
+                 stat:node的状态信息
+        """
         data, stat = self.zk.get(zk_node)
         return data, stat
 
     def set_node_value(self, zk_node, data):
+        """
+        设置zookeeper节点的value
+        :param zk_node:
+        :param data:
+        :return:
+        """
         return self.zk.set(zk_node, value=data)
 
     def delete_node(self, zk_node):
+        """
+        删除某一节点
+        :param zk_node:
+        :return:
+        """
         self.zk.delete(zk_node)
 
     def create_node(self, node, flag=False):
         """
-        lock the free node
+        创建zookeeper节点
         :param node:
         :param flag:
         :return:
@@ -160,33 +174,42 @@ class Zookeeper:
         get zookeeper seq
         :param cur_seq:
         :param filename_pool:
-        :return: zk_seq
+        :return: zk_seq:
+                       0: 返回0代表未到合并时间点
+                       1: 返回1代表没有抢占到filename_pool
+                       next_child:返回获取到的filename_pool节点
         """
         if not self.zk.exists(filename_pool):
-            logging.error('the zookeeper filename_pool not exist')
+            logging.error('no filename_pool in zookeeper')
             sys.exit()
-        child = self.zk.get_children(filename_pool)
-        if not child:
+        childs = self.zk.get_children(filename_pool)
+        if not childs:
             logging.error('the zookeeper filename_pool is empty')
             sys.exit()
-        zk_fn_seq = child[0]
-        file_date, zk_seq = zk_fn_seq.split('.')
-        zk_fs = ("%s%s" % (file_date, zk_seq))
-        zk_fs = re.sub("[A-Za-z.]", "", zk_fs)
-        if int(zk_fs) > int(cur_seq):
-            logging.info('zk_seq > cur_seq, wait...')
-            return None
-        zk_seq = int(zk_seq) + 1
-        if zk_seq > self.MAX_MERGE_FILE_SEQUENCE:
-            zk_seq = 0
-            file_date = datetime.datetime.strptime(file_date, '%Y%m%d')
-            next = file_date + datetime.timedelta(days=1)
-            file_date = ('%s%02d%02d' % (next.year, next.month, next.day))
-
-        zk_seq = "%03d" % zk_seq
-        next_child = '%s.%s' % (file_date, zk_seq)
-        self.zk.delete("%s/%s" % (filename_pool, zk_fn_seq))
-        self.zk.create("%s/%s" % (filename_pool, next_child))
-
-        return next_child
+        # zk_fn_seq = childs[0]
+        for child in childs:
+            file_date, zk_seq, prov = child.split('.')
+            zk_fs = ("%s%s" % (file_date, zk_seq))
+            zk_fs = re.sub("[A-Za-z.]", "", zk_fs)
+            if int(zk_fs) > int(cur_seq):
+                logging.info('zk_seq > cur_seq, wait...')
+                return 0
+            zk_seq = int(zk_seq) + 1
+            if zk_seq > self.MAX_MERGE_FILE_SEQUENCE:
+                zk_seq = 0
+                file_date = datetime.datetime.strptime(file_date, '%Y%m%d')
+                next_time = file_date + datetime.timedelta(days=1)
+                file_date = ('%s%02d%02d' % (next_time.year, next_time.month, next_time.day))
+            zk_seq = "%03d" % zk_seq
+            next_child = '%s.%s.%s' % (file_date, zk_seq, prov)
+            # 创建一次事务，删除旧的序号并创建新的序号，保证原子性
+            transaction_request = self.zk.transaction()
+            transaction_request.delete("%s/%s" % (filename_pool, child))
+            transaction_request.create("%s/%s" % (filename_pool, next_child))
+            results = transaction_request.commit()
+            if results[0] is True and results[1] == ("%s/%s" % (filename_pool, next_child)):
+                return next_child
+            else:
+                continue
+        return 1
 
