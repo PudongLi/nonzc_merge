@@ -54,14 +54,13 @@ pl.set_log(log_path, process_id)
 line_limit = cfg["common"]["line_limit"].strip()
 input_path = cfg["common"]["inputdir"].strip()
 output_path = cfg["common"]["destdir"].strip()
-redo_path = cfg["common"]["redopath"].strip()
 batch_size = cfg["common"]["batchsize"].strip()
 bak_path = cfg["common"]["bakpath"].strip()
 filename_part = cfg["rule"]["filenamepart"].strip()
 # ------------------------------------
 redo_node = process_path + "/" + work_node + "/" + "redo"
 redo_node_flag = zoo.check_exists(redo_node)
-my_flow = Flow(process_id, line_limit, input_path, output_path, redo_path, batch_size, bak_path, filename_header,
+my_flow = Flow(process_id, line_limit, input_path, output_path, batch_size, bak_path, filename_header,
                zoo, redo_node)
 recover = 0
 
@@ -75,12 +74,6 @@ if redo_node_flag is not None:
         recover, filename_pool_str = zk_redo.do_task()
         file_date, prov, zk_seq = filename_pool_str.split(",")
         my_flow.work(file_date, prov, zk_seq, filename_part)
-# ------------------------------------
-
-# redo_file = redo_path + "/" + "merge." + process_id + ".redo"
-# check_redo = CheckRedo(redo_file, process_id, config.output_dirs)
-# recover, zk_seq, filename = check_redo.do_task()
-
 while 1:
     redo_info = []
     current_time = datetime.datetime.now().strftime('%Y%m%d-%H-%M-%S')

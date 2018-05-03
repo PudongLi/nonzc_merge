@@ -187,12 +187,13 @@ class Zookeeper:
             logging.error('the zookeeper filename_pool is empty')
             sys.exit()
         # zk_fn_seq = childs[0]
+        childs = sorted(childs)
         for child in childs:
             file_date, zk_seq, prov = child.split('.')
             zk_fs = ("%s%s" % (file_date, zk_seq))
             zk_fs = re.sub("[A-Za-z.]", "", zk_fs)
             if int(zk_fs) > int(cur_seq):
-                logging.info('zk_seq > cur_seq, wait...')
+                logging.info('zk_seq:%s > cur_seq:%s, wait...' % (zk_fs, cur_seq))
                 return 0
             zk_seq = int(zk_seq) + 1
             if zk_seq > self.MAX_MERGE_FILE_SEQUENCE:

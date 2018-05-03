@@ -24,13 +24,12 @@ from redo import Redo
 
 class Flow:
     def __init__(self, process_id, line_limit, input_path, output_path,
-                 redo_path, batch_size, bak_path, filename_header, zoo, redo_node):
+                 batch_size, bak_path, filename_header, zoo, redo_node):
         self.process_id = process_id
         self.fieldlen = ""
         self.line_limit = int(line_limit)
         self.input_path = input_path
         self.output_path = output_path
-        self.redo_path = redo_path
         self.batch_size = batch_size
         self.bak_path = bak_path
         self.filename_header = filename_header
@@ -99,6 +98,7 @@ class Flow:
             for line in this_file:
                 line_list = line.split(";")
                 line_list[130] = new_filename
+                line_list.index()
                 this_arrivetime = line_list[134][0:8]
                 file_content.append(";".join(line_list))
             # 判断此文件arrive_time与上一个文件的arrive_time是否一致，若不一致，将此文件挪回入口目录
