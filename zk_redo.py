@@ -19,10 +19,12 @@ class ZkRedo:
 
     def read_redo(self):
         filename_pool_str = ""
+
         redo_info_list = self.redo_info.split(";")
+        logging.info("test redo info:%s" % redo_info_list)
         for info in redo_info_list:
             if info.startswith("filenamepool"):
-                filename_pool_str = info.replace("filenamepool:")
+                filename_pool_str = info.replace("filenamepool:", "").strip()
         step = 0
         if "begin" in redo_info_list:
             step = 1
@@ -84,7 +86,6 @@ class ZkRedo:
         return
 
     def do_task(self):
-
         filename_pool_str, action_step = self.read_redo()
         if action_step == 1:
             self.move_pickfile(True)

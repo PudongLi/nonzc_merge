@@ -39,6 +39,14 @@ class Flow:
         self.redo_node = redo_node
 
     def work(self, file_date, prov, seq, filename_part):
+        """
+
+        :param file_date: 合并日期，用来组成输出文件名
+        :param prov: 省代码，用来组成输出文件名
+        :param seq: 合并序号，用来组成输出文件名
+        :param filename_part: 输出文件名组成规则
+        :return:
+        """
         HEAD = self.filename_header
         OFN = file_date
         PROV = prov
@@ -58,22 +66,11 @@ class Flow:
             else:
                 new_filename += part
         logging.info("new file name:%s" % new_filename)
-        # new_filename = self.filename_header + file_date + "." + prov + "." + seq
         file_list = os.listdir(self.input_temp)
         if not os.path.exists(self.output_temp):
-            os.makedirs(self.output_temp)
+            os.mkdir(self.output_temp)
         new_file = open(self.output_temp + "/" + new_filename, "a")
         arrive_time = ""
-        # rf = ("%s/merge.%s.redo" % (self.redo_path, self.process_id))
-        # redo_file = open(rf, 'a')
-        # redo_file.writelines(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n")
-        # redo_file.close()
-        # # 实例化类
-        # redo = Redo()
-        # redo_content_dic = {"todo_list": file_list, "action_step": "BEGIN"}
-        # redo.write_redo(rf, redo_content_dic)
-        # redo.write_redo(rf, {'zk_seq': seq})
-        # redo.write_redo(rf, {'file_list': new_filename})
         line_num = 0
         file_num = 0
         end_file_list = copy.deepcopy(file_list)
@@ -128,15 +125,16 @@ class Flow:
         redo_info.append("filenamepool:" + filename_pool)
         redo_info.append("end")
         self.zoo.set_node_value(self.redo_node, ";".join(redo_info).encode("utf-8"))
-        # redo_content_done = {"action_step": "END"}
-        # redo.write_redo(rf, redo_content_done)
-        # redo_file.close()
         self.move_file(end_file_list, new_filename)
         self.zoo.delete_node(self.redo_node)
-        # redo.delete_redo(rf)
 
     def move_file(self, sourcefile_list, outputfile):
+        """
 
+        :param sourcefile_list:
+        :param outputfile:
+        :return:
+        """
         for file in sourcefile_list:
 
             try:
@@ -159,7 +157,7 @@ class Flow:
 
     def get_file(self, match_expr):
         if not os.path.exists(self.input_temp):
-            os.makedirs(self.input_temp)
+            os.mkdir(self.input_temp)
         file_num = 0
         file_list = os.listdir(self.input_path)
         for file in file_list:
