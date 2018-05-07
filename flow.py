@@ -95,7 +95,7 @@ class Flow:
             for line in this_file:
                 line_list = line.split(";")
                 line_list[130] = new_filename
-                line_list.index()
+                # line_list.index()
                 this_arrivetime = line_list[134][0:8]
                 file_content.append(";".join(line_list))
             # 判断此文件arrive_time与上一个文件的arrive_time是否一致，若不一致，将此文件挪回入口目录

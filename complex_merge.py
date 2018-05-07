@@ -110,9 +110,9 @@ if redo_node_flag is not None:
     redo_info = bytes.decode(redo_info)
     if redo_info is not None:
         zk_redo = ZkRedo(redo_info, process_id, input_path, output_path, bak_path)
-        recover, filename_pool_str = zk_redo.do_task()
+        filename_pool_str = zk_redo.do_task()
         file_date, prov, zk_seq = filename_pool_str.split(",")
-        my_flow.work(file_date, prov, zk_seq, filename_part)
+        my_flow.work(file_date, zk_seq, prov, filename_part)
 
 while 1:
     redo_info = []

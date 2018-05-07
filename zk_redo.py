@@ -89,7 +89,9 @@ class ZkRedo:
         filename_pool_str, action_step = self.read_redo()
         if action_step == 1:
             self.move_pickfile(True)
-            return 1, filename_pool_str
+            return filename_pool_str
         elif action_step == 2:
             self.move_pickfile()
-            return 0, ""
+            return ""
+        elif action_step == 0:
+            return filename_pool_str
