@@ -10,7 +10,10 @@ from lib.nframe import PublicLib
 from zookeeper import Zookeeper
 from flow import Flow
 from zk_redo import ZkRedo
+from lib.receive_signal import ReceiveSignal
 
+
+ReceiveSignal.receive_signal()
 pl = PublicLib()
 config_file = ''
 
@@ -29,7 +32,10 @@ except getopt.GetoptError as e:
 if not os.path.isfile(config_file):
     print("config file :%s not exsit" % config_file)
     sys.exit()
+
 # 创建配置文件实例,获取配置文件内容
+process_id = str(os.path.basename(config_file).split("_")[0])
+
 config = Config(config_file)
 cfg = config.get_config()
 match_expr = cfg["rule"]["input_rule_exp"].strip()
@@ -64,11 +70,12 @@ if zk_host_list == "":
     print("zk host list is null! please check the config file")
     sys.exit()
 
-
 # 创建zookeeper实例
 zoo = Zookeeper(zk_host_list, MAX_MERGE_FILE_SEQUENCE)
-work_node = zoo.get_node(process_path)
-process_id = ''.join(work_node.split('_')[1:])
+zoo.connect()
+# work_node = zoo.get_node(process_path)
+work_node = "process_" + process_id
+# process_id = ''.join(work_node.split('_')[1:])
 pl.set_log(log_path, process_id)
 # ------------------------------------
 line_limit = cfg["common"]["line_limit"].strip()
@@ -123,7 +130,7 @@ while 1:
     sequence = '%03d' % int(sequence)
     sys_sequence = merge_date + str(sequence)
     logging.info('get system sequence:%s' % sys_sequence)
-    filename_seq = zoo.zk_get_merge_fn(sys_sequence, zk_filenamepool)
+    filename_seq = zoo.zk_get_merge_fn(process_path, work_node, sys_sequence, zk_filenamepool)
 
     if filename_seq == 0:
         # zk_seq > cur_seq，未到合并时间点
@@ -135,10 +142,10 @@ while 1:
     file_date, zk_seq, prov = filename_seq.split(".")
     filename_pool = ",".join([file_date, zk_seq, prov])
     redo_info.append("filenamepool:" + filename_pool)
-    zoo.create_node(redo_node)
-    zoo.set_node_value(redo_node, ";".join(redo_info).encode("utf-8"))
+    # zoo.create_node(redo_node)
+    # zoo.set_node_value(redo_node, ";".join(redo_info).encode("utf-8"))
     logging.info("match expr:%s" % (match_expr + prov))
     my_flow.get_file(match_expr + prov)
     my_flow.work(file_date, prov, zk_seq, filename_part)
-    logging.info("work end")
-    time.sleep(1)
+    if ReceiveSignal.EXIT_FLAG:
+        sys.exit()

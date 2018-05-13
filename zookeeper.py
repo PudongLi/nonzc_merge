@@ -169,9 +169,11 @@ class Zookeeper:
         self.zk.create(dest)
         self.zk.set(dest, value=data)
 
-    def zk_get_merge_fn(self, cur_seq, filename_pool):
+    def zk_get_merge_fn(self, process_path, work_node, cur_seq, filename_pool):
         """
-        get zookeeper seq
+        获取filename_pool下的序号，记录redo
+        :param process_path
+        :param work_node
         :param cur_seq:
         :param filename_pool:
         :return: zk_seq:
@@ -188,6 +190,7 @@ class Zookeeper:
             sys.exit()
         # zk_fn_seq = childs[0]
         childs = sorted(childs)
+        redo_info = []
         for child in childs:
             file_date, zk_seq, prov = child.split('.')
             zk_fs = ("%s%s" % (file_date, zk_seq))
@@ -207,6 +210,11 @@ class Zookeeper:
             transaction_request = self.zk.transaction()
             transaction_request.delete("%s/%s" % (filename_pool, child))
             transaction_request.create("%s/%s" % (filename_pool, next_child))
+            redo_seq = ",".join([file_date, zk_seq, prov])
+            redo_info.append("filenamepool:" + redo_seq)
+            redo_node = process_path + "/" + work_node + "/" + "redo"
+            self.create_node(redo_node)
+            self.set_node_value(redo_node, ";".join(redo_info).encode("utf-8"))
             results = transaction_request.commit()
             if results[0] is True and results[1] == ("%s/%s" % (filename_pool, next_child)):
                 return next_child
